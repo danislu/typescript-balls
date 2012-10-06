@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+
+        <title>pool</title>
+        <meta charset="utf-8">
+        
+        <script type="text/javascript" src="main.js"></script>
+        <style>
+            canvas {
+                background: #3DA81C;
+            }
+        </style>
+        
+	<body>
+		<canvas id="c" width="400" height="400"></canvas>
+        
+        <script>
+            var canvas = document.getElementById('c');
+            
+            var pool = new Dsl.Pool(400, 400, 0, 0, canvas.getContext('2d'));
+            pool.start();
+        </script>
+        
+	</body>
+</html>
