@@ -1,7 +1,7 @@
 module Dsl {
 
     var friction: number = 0.95;
-    var speed: number = 0.5;
+    var speed: number = 0.3;
 
     export class Pool {
 
@@ -27,9 +27,6 @@ module Dsl {
             }
 
             window.onmousedown = (e) => {
-                this.currentPoint = null;
-                this.startPoint = null;
-
                 var hitPoint = getHitPoint(e),
                 prop: string,
                 ball: Ball;
@@ -39,25 +36,28 @@ module Dsl {
                     if (ball.isHit(hitPoint)) {
                         this.startPoint = ball.location;
                         this.currentBall = ball;
+                        this.currentBall.isActive = true;
                         break;
                     }
                 }
             }
 
             window.onmousemove = (e) => {
-                if (this.currentBall != null) {
+                if (this.currentBall) {
                     this.currentPoint = getHitPoint(e);
                 }
             }
 
             window.onmouseup = (e) => {
-                if (this.currentBall != null && this.startPoint != null) {
+                if (this.currentBall && this.startPoint) {
                     this.currentPoint = getHitPoint(e);
 
                     this.currentBall.velocity.add(getVector(this.startPoint, this.currentPoint));
+                    this.currentBall.isActive = false;
                 }
                 this.currentBall = null;
                 this.startPoint = null;
+                this.currentPoint = null;
             }
         }
 
@@ -137,9 +137,9 @@ module Dsl {
                         continue;
 
                     if (ball.isCrashed(otherBall)) {
-                        ball.touched = otherBall.touched = true;
+                        ball.isTouching = otherBall.isTouching = true;
 
-                        var dist = ball.location.distanceTo(otherBall.location);
+                        //var dist = ball.location.distanceTo(otherBall.location);
 
                         ball.velocity = new Vector(0, 0, 0);
                         otherBall.velocity = new Vector(0, 0, 0);
@@ -150,13 +150,16 @@ module Dsl {
     }
 
     class Ball {
-        touched: bool;
-        velocity: Vector = new Vector(0, 0);
+        public isTouching: bool;
+        public velocity: Vector = new Vector(0, 0);
+        public isActive: bool;
 
         constructor (public context, public location: Point, public size: number = 10, public colour: string = "white") { }
 
         draw() {
-            if (this.touched)
+            if (this.isActive)
+                this.context.fillStyle = "orange";
+            else if (this.isTouching)
                 this.context.fillStyle = "red";
             else
                 this.context.fillStyle = this.colour;
@@ -166,9 +169,12 @@ module Dsl {
             this.context.closePath();
             this.context.fill();
 
-            this.context.strokeStyle = "gray";
+            if (this.isActive)
+                this.context.strokeStyle = "black";
+            else
+                this.context.strokeStyle = "gray";
             this.context.beginPath();
-            this.context.arc(this.location.x, this.location.y, this.size, 0, Math.PI*2, true);
+            this.context.arc(this.location.x, this.location.y, this.size, 0, Math.PI * 2, true);
             this.context.closePath();
             this.context.stroke();
         }
@@ -188,15 +194,17 @@ module Dsl {
                 return newX;
             }
 
-            this.touched = false;
+            this.isTouching = false;
             for (i = 0; i < steps; i++) {
                 this.velocity.addFriction(friction);
 
                 this.location.x = getNewValue(this.location.x, this.velocity.x, width);
                 this.location.y = getNewValue(this.location.y, this.velocity.y, heigth);
-                this.location.z += this.velocity.z;                
+                this.location.z += this.velocity.z;
             }
         }
+
+
 
         isCrashed(otherBall: Ball): bool {
             var dist = this.location.distanceTo(otherBall.location);
