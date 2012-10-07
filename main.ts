@@ -7,7 +7,7 @@ module Dsl {
 
         collection: BallCollection;
 
-        constructor (public height: number, public width: number, public xOffset: number, public yOffset: number, public ctx, ballCount: number = 2) {
+        constructor (public height: number, public width: number, public xOffset: number, public yOffset: number, public ctx, ballCount: number = 30) {
             var i: number,
             ball: Ball,
             balls: Ball[] = new Ball[];
@@ -83,9 +83,7 @@ module Dsl {
             this.draw();
 
             if (this.running) {
-                setTimeout(() => {
-                    this.tick()
-                }, 10);
+                setTimeout(() => { this.tick() });
             }
         }
 
@@ -116,6 +114,52 @@ module Dsl {
             }
         }
 
+        static moveBallsBack(ballA: Ball, ballB: Ball) {
+            //var dist = 21 - ballA.location.distanceTo(ballB.location);
+
+            //var speed = ballA.velocity.getSize();
+            //var otherSpeed = ballB.velocity.getSize();
+
+            //var totalSpeed = speed + otherSpeed;
+            //var oneP = totalSpeed / 100;
+
+            //var speedPart = (speed / oneP) / 100;
+            //var otherSpeedPart = (otherSpeed / oneP) / 100;
+            //if (otherSpeedPart < 0.001) {
+            //    otherSpeedPart = 0;
+            //    speedPart = 1;
+            //}
+            //if (speedPart < 0.001) {
+            //    otherSpeedPart = 1;
+            //    speedPart = 0;
+            //}
+
+            //var oneDist = dist * speedPart;
+            //var negV = ballA.velocity.negativeClone();
+            //var negSize = negV.getSize();
+            //var rel = (negSize != 0)
+            //    ? oneDist / negSize
+            //    : 0;
+
+            //ballA.location.x += negV.x * rel;
+            //ballA.location.y += negV.y * rel;
+            //ballA.location.z += negV.z * rel;
+
+            //var oneDist2 = dist * otherSpeedPart;
+            //var negV2 = ballB.velocity.negativeClone();
+            //var negSize2 = negV2.getSize();
+
+            //var rel2 = (negSize2 != 0)
+            //        ? oneDist2 / negSize2
+            //        : 0;
+
+            //ballB.location.x += negV2.x * rel2;
+            //ballB.location.y += negV2.y * rel2;
+            //ballB.location.z += negV2.z * rel2;
+
+            
+        }
+
         update() {
             var touched: Ball[],
             ball: Ball,
@@ -135,14 +179,24 @@ module Dsl {
                     otherBall = this.balls[prop];
                     if (otherBall === ball)
                         continue;
+                    if (otherBall.isTouching(ball))
+                        continue;
 
                     if (ball.isCrashed(otherBall)) {
-                        ball.isTouching = otherBall.isTouching = true;
+                        ball.addTouching(otherBall);
+                        otherBall.addTouching(ball);
 
-                        //var dist = ball.location.distanceTo(otherBall.location);
+                        var distanseBefore = ball.location.distanceTo(otherBall.location);
+                        BallCollection.moveBallsBack(ball, otherBall);
+                        var distanseAfter = ball.location.distanceTo(otherBall.location);
 
-                        ball.velocity = new Vector(0, 0, 0);
-                        otherBall.velocity = new Vector(0, 0, 0);
+                        var dx = ball.location.x - otherBall.location.x;
+                        var dy = ball.location.y - otherBall.location.y;
+
+                        ball.velocity.x += (dx * 0.1);
+                        ball.velocity.y += (dy * 0.1);
+                        otherBall.velocity.x -= (dx * 0.1);
+                        otherBall.velocity.y -= (dy * 0.1);
                     }
                 }
             }
@@ -150,16 +204,39 @@ module Dsl {
     }
 
     class Ball {
-        public isTouching: bool;
+        static ballCount: number = 0;
+        private contactingBalls: Ball[] = new Ball[];
+        public addTouching(ball: Ball): void {
+            if (!this.isTouching(ball))
+                this.contactingBalls.push(ball);
+        }
+        public removeTouching(ball: Ball): void {
+            if (this.isTouching(ball)) {
+                var index = this.contactingBalls.indexOf(ball);
+                this.contactingBalls.splice(index);
+            }
+        }
+        public clearTouching(): void {
+            this.contactingBalls = null;
+            this.contactingBalls = new Ball[];
+        }
+        public isTouching(ball?: Ball): bool {
+            if (!ball)
+                return this.contactingBalls.length != 0;
+
+            return this.contactingBalls.indexOf(ball, 0) >= 0;
+        }
         public velocity: Vector = new Vector(0, 0);
         public isActive: bool;
-
-        constructor (public context, public location: Point, public size: number = 10, public colour: string = "white") { }
+        private no: number;
+        constructor (public context, public location: Point, public size: number = 10, public colour: string = "white") {
+            this.no = Ball.ballCount++;
+        }
 
         draw() {
             if (this.isActive)
                 this.context.fillStyle = "orange";
-            else if (this.isTouching)
+            else if (this.isTouching())
                 this.context.fillStyle = "red";
             else
                 this.context.fillStyle = this.colour;
@@ -177,6 +254,12 @@ module Dsl {
             this.context.arc(this.location.x, this.location.y, this.size, 0, Math.PI * 2, true);
             this.context.closePath();
             this.context.stroke();
+
+            this.context.fillStyle = "black";
+            this.context.font = "10px Georgia";
+            var txt = this.no.toString();
+            var width = this.context.measureText(txt).width;
+            this.context.fillText(txt, this.location.x - width / 2, this.location.y + 3);
         }
 
         update(heigth: number, width: number, steps: number = 1) {
@@ -194,7 +277,8 @@ module Dsl {
                 return newX;
             }
 
-            this.isTouching = false;
+
+            this.clearTouching()
             for (i = 0; i < steps; i++) {
                 this.velocity.addFriction(friction);
 
@@ -204,11 +288,13 @@ module Dsl {
             }
         }
 
-
+        toString() {
+            return this.no.toString();
+        }
 
         isCrashed(otherBall: Ball): bool {
             var dist = this.location.distanceTo(otherBall.location);
-            return dist <= 20;
+            return dist < 20;
         }
 
         isHit(hit: Point): bool {
@@ -250,6 +336,14 @@ module Dsl {
             this.x += vector.x;
             this.y += vector.y;
             this.z += vector.z;
+        }
+
+        getSize() {
+            return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+        }
+
+        negativeClone(): Vector {
+            return new Vector(this.x * -1, this.y * -1, this.z * -1);
         }
     }
 }
