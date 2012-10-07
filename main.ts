@@ -1,37 +1,43 @@
 module Dsl {
 
-    export class Pool { 
+    var friction: number = 0.95;
+    var speed: number = 0.5;
+
+    export class Pool {
 
         collection: BallCollection;
 
-        constructor (public height : number, public width : number, public xOffset : number, public yOffset : number, public context, ballCount: number = 1) {
-            var i : number,
-                ball : Ball,
-                balls : Ball[] = new Ball[];
+        constructor (public height: number, public width: number, public xOffset: number, public yOffset: number, public ctx, ballCount: number = 2) {
+            var i: number,
+            ball: Ball,
+            balls: Ball[] = new Ball[];
 
             if (ballCount < 1) ballCount = 1;
 
             for (i = 0; i < ballCount; i++) {
-                ball = new Ball(context, new Point(Math.random() * width, Math.random() * height, 0));
+                ball = new Ball(ctx, new Point(Math.random() * width, Math.random() * height, 0));
                 balls.push(ball);
             }
-           
-            this.collection = new BallCollection();
+
+            this.collection = new BallCollection(height, width);
             this.collection.balls = balls;
 
-            function getHitPoint(e: MouseEvent) : Point {
+            function getHitPoint(e: MouseEvent): Point {
                 return new Point(e.pageX - xOffset, e.pageY - yOffset);
             }
 
             window.onmousedown = (e) => {
+                this.currentPoint = null;
+                this.startPoint = null;
+
                 var hitPoint = getHitPoint(e),
-                    prop: string,
-                    ball: Ball;
+                prop: string,
+                ball: Ball;
 
                 for (prop in this.collection.balls) {
                     ball = this.collection.balls[prop];
                     if (ball.isHit(hitPoint)) {
-                        this.startPoint = hitPoint;
+                        this.startPoint = ball.location;
                         this.currentBall = ball;
                         break;
                     }
@@ -47,8 +53,8 @@ module Dsl {
             window.onmouseup = (e) => {
                 if (this.currentBall != null && this.startPoint != null) {
                     this.currentPoint = getHitPoint(e);
-                         
-                    this.currentBall.velocity = getVector(this.startPoint, this.currentPoint);
+
+                    this.currentBall.velocity.add(getVector(this.startPoint, this.currentPoint));
                 }
                 this.currentBall = null;
                 this.startPoint = null;
@@ -69,25 +75,28 @@ module Dsl {
         }
 
         private tick() {
+            this.ctx.clearRect(0, 0, this.width, this.height);
+
             this.collection.update();
             this.collection.draw();
-            
+
             this.draw();
 
             if (this.running) {
                 setTimeout(() => {
                     this.tick()
-                }, 50);
+                }, 10);
             }
         }
 
         private draw() {
             if (this.startPoint && this.currentPoint) {
-                this.context.beginPath();
-                this.context.moveTo(this.startPoint.x, this.startPoint.y);
-                this.context.lineTo(this.currentPoint.x, this.currentPoint.y);
-                this.context.closePath();
-                this.context.stroke();
+                this.ctx.strokeStyle = "black";
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.startPoint.x, this.startPoint.y);
+                this.ctx.lineTo(this.currentPoint.x, this.currentPoint.y);
+                this.ctx.closePath();
+                this.ctx.stroke();
             }
         }
     }
@@ -95,9 +104,11 @@ module Dsl {
     class BallCollection {
         balls: Ball[];
 
+        constructor (private height: number, private width: number) { }
+
         draw() {
             var ball: Ball,
-                prop: string;
+            prop: string;
 
             for (prop in this.balls) {
                 ball = this.balls[prop];
@@ -114,7 +125,7 @@ module Dsl {
             // update all balls position
             for (prop in this.balls) {
                 ball = this.balls[prop];
-                ball.update();
+                ball.update(this.height, this.width);
             }
 
             // check for collisions
@@ -127,7 +138,11 @@ module Dsl {
 
                     if (ball.isCrashed(otherBall)) {
                         ball.touched = otherBall.touched = true;
-                        otherBall.velocity = ball.velocity = new Vector(0, 0, 0);
+
+                        var dist = ball.location.distanceTo(otherBall.location);
+
+                        ball.velocity = new Vector(0, 0, 0);
+                        otherBall.velocity = new Vector(0, 0, 0);
                     }
                 }
             }
@@ -136,49 +151,70 @@ module Dsl {
 
     class Ball {
         touched: bool;
-        velocity: Vector = new Vector(0,0);
-        
-        constructor (public context, public location: Point, public size: number = 10, public colour: string = "#00000") { }
+        velocity: Vector = new Vector(0, 0);
+
+        constructor (public context, public location: Point, public size: number = 10, public colour: string = "white") { }
 
         draw() {
             if (this.touched)
-                this.context.fillStyle = "#fffff";
+                this.context.fillStyle = "red";
             else
                 this.context.fillStyle = this.colour;
+
+            this.context.beginPath();
             this.context.arc(this.location.x, this.location.y, this.size, 0, 360, false);
+            this.context.closePath();
             this.context.fill();
+
+            this.context.strokeStyle = "gray";
+            this.context.beginPath();
+            this.context.arc(this.location.x, this.location.y, this.size, 0, Math.PI*2, true);
+            this.context.closePath();
+            this.context.stroke();
         }
 
-        update(steps: number = 1) {
+        update(heigth: number, width: number, steps: number = 1) {
             var i;
+
+            function getNewValue(loc: number, vel: number, wall: number): number {
+                var velocity = vel * speed;
+                var newX = loc + velocity;
+                if (newX > wall) {
+                    return velocity;
+                }
+                else if (newX < 0) {
+                    return wall + velocity;
+                }
+                return newX;
+            }
 
             this.touched = false;
             for (i = 0; i < steps; i++) {
-                this.location.x += this.velocity.x;
-                this.location.y += this.velocity.y;
-                this.location.z += this.velocity.z;
+                this.velocity.addFriction(friction);
 
-                this.velocity.addFriction(0.1);
+                this.location.x = getNewValue(this.location.x, this.velocity.x, width);
+                this.location.y = getNewValue(this.location.y, this.velocity.y, heigth);
+                this.location.z += this.velocity.z;                
             }
         }
 
         isCrashed(otherBall: Ball): bool {
-            var dist = this.location.getDist(otherBall.location);
+            var dist = this.location.distanceTo(otherBall.location);
             return dist <= 20;
         }
 
-        isHit(hit: Point) : bool {
-            var dist = this.location.getDist(hit);
+        isHit(hit: Point): bool {
+            var dist = this.location.distanceTo(hit);
             return dist <= this.size;
         }
 
-        
+
     }
 
     class Point {
         constructor (public x: number, public y: number, public z: number = 0) { }
 
-        getDist(other: Point) : number {
+        distanceTo(other: Point): number {
             var x = Math.abs(this.x - other.x);
             var y = Math.abs(this.y - other.y);
             var z = Math.abs(this.z - other.z);
@@ -188,7 +224,7 @@ module Dsl {
     }
 
     function getVector(a: Point, b: Point): Vector {
-        return new Vector(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.z - b.z));
+        return new Vector(a.x - b.x, a.y - b.y, a.z - b.z);
     }
 
     class Vector extends Point {
@@ -200,6 +236,12 @@ module Dsl {
             this.x *= friction;
             this.y *= friction;
             this.z *= friction;
+        }
+
+        add(vector: Vector) {
+            this.x += vector.x;
+            this.y += vector.y;
+            this.z += vector.z;
         }
     }
 }
